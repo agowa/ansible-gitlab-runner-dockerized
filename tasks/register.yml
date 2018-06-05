@@ -1,0 +1,24 @@
+- name: GitLab-Runner | Register | register runner
+  docker_container:
+    name: '{{ ansible_gitlab_runner_container_name }}'
+    state: started
+    image: '{{ ansible_gitlab_runner_base_image }}'
+    volumes:
+      - '{{ ansible_gitlab_runner_project_directory }}/etc:/etc/gitlab-runner:rw'
+      - '/var/run/docker.sock:{{ ansible_gitlab_runner_docker_socket_path }}:rw'
+    docker_host: 'unix:/{{ ansible_docker_socket_path }}'
+    auto_remove: true
+    cleanup: true
+    detach: false
+    command: |-
+      {{ 'register --non-interactive' +
+        ' --executor "' + {{ ansible_gitlab_runner_executor }} + '"' +
+        ' --docker-image "' + {{ ansible_gitlab_runner_docker_image }} + '"' +
+        ' --url "' + {{ ansible_gitlab_url }} + '"' +
+        ' --registration-token "' + {{ ansible_gitlab_registration_token }} + '"' +
+        ' --description "' + {{ ansible_gitlab_runner_description }} + '"' +
+        ' --tag-list "' + {{ ansible_gitlab_runner_tags | join(",") }} + '"' +
+        {{ (ansible_gitlab_runner_run_untagged) | ternary(' --run-untagged', '') }} +
+        ' --locked="' + {{ (ansible_gitlab_runner_locked) | ternary('true', 'false') }} + '"' }}
+    tty: true
+  notify: restart gitlab-runner

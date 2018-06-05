@@ -10,6 +10,8 @@
   with_items:
     - '{{ ansible_gitlab_runner_project_directory }}'
     - '{{ ansible_gitlab_runner_project_directory }}/etc'
+- name: GitLab-Runner | Register in GitLab
+  include: register.yml
 - name: GitLab-Runner | bootstrap container
   docker_container:
     name: '{{ ansible_gitlab_runner_container_name }}'
