@@ -1,0 +1,5 @@
+ansible_gitlab_runner_base_image: 'gitlab/gitlab-runner:latest'
+ansible_gitlab_runner_project_directory: '/srv/gitlab-runner'
+ansible_gitlab_runner_container_name: 'gitlab-runner'
+ansible_docker_socket_path: '/var/run/docker.sock'
+ansible_gitlab_runner_docker_socket_path: '{{ ansible_docker_socket_path }}'

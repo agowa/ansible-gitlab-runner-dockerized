@@ -1,0 +1,26 @@
+- name: GitLab-Runner | pull image
+  docker_image:
+    name: '{{ ansible_gitlab_runner_base_image }}'
+    docker_host: 'unix:/{{ ansible_docker_socket_path }}'
+  notify: restart gitlab-runner
+- name: GitLab-Runner | volume directory
+  file:
+    path: '{{ item }}'
+    state: directory
+  with_items:
+    - '{{ ansible_gitlab_runner_project_directory }}'
+    - '{{ ansible_gitlab_runner_project_directory }}/etc'
+- name: GitLab-Runner | bootstrap container
+  docker_container:
+    name: '{{ ansible_gitlab_runner_container_name }}'
+    state: present
+    image: '{{ ansible_gitlab_runner_base_image }}'
+    volumes:
+      - '{{ ansible_gitlab_runner_project_directory }}/etc:/etc/gitlab-runner:rw'
+      - '/var/run/docker.sock:{{ ansible_gitlab_runner_docker_socket_path }}:rw'
+    docker_host: 'unix:/{{ ansible_docker_socket_path }}'
+  notify: restart gitlab-runner
+- name: GitLab-Runner | start container
+  docker_container:
+    name: '{{ ansible_gitlab_runner_container_name }}'
+    state: started

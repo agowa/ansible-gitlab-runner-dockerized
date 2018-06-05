@@ -1,0 +1,16 @@
+- name: GitLab-Runner | restart hook | delete container
+  docker_container:
+    name: '{{ ansible_gitlab_runner_container_name }}'
+    state: absent
+- name: GitLab-Runner | restart hook | bootstrap container
+  docker_container:
+    name: '{{ ansible_gitlab_runner_container_name }}'
+    state: present
+    image: '{{ ansible_gitlab_runner_base_image }}'
+    volumes:
+      - '{{ ansible_gitlab_runner_project_directory }}/etc:/etc/gitlab-runner:rw'
+      - '/var/run/docker.sock:{{ ansible_docker_socket_path }}:rw'
+- name: GitLab-Runner | restart hook | start container
+  docker_container:
+    name: '{{ ansible_gitlab_runner_container_name }}'
+    state: started

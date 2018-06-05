@@ -1,0 +1,2 @@
+- name: restart gitlab-runner
+  include: ../handlers/restart-gitlab-runner.yml
