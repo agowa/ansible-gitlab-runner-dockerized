@@ -1,2 +1,4 @@
 - name: restart gitlab-runner
-  include: ../handlers/restart-gitlab-runner.yml
+#  include: ../handlers/restart-gitlab-runner.yml
+  debug:
+    msg: handler exdcuted

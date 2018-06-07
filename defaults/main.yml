@@ -6,11 +6,17 @@ ansible_gitlab_runner_docker_socket_path: '{{ ansible_docker_socket_path }}'
 
 ansible_gitlab_runner_executor: 'docker'
 ansible_gitlab_runner_docker_image: 'alpine:latest'
-ansible_gitlab_url: 'https://gitlab.com'
-ansible_gitlab_registration_token: "PROJECT_REGISTRATION_TOKEN"
+ansible_gitlab_url: 'https://chaos.expert'
+ansible_gitlab_registration_repossitories:
+  - 'agowa338-ansible/ansible-gitlab-runner-dockerized'
+  - 'agowa338-ansible/ansible-docker'
+ansible_gitlab_api_token: "" # TODO: revoke
 ansible_gitlab_runner_description: 'docker-runner'
 ansible_gitlab_runner_tags:
   - 'docker'
   - 'aws'
 ansible_gitlab_runner_run_untagged: true
 ansible_gitlab_runner_locked: false
+
+gitlab_runner__runners_api_url: '{{ ansible_gitlab_url }}/api/v4/runners'
+gitlab_runner__projects_api_url: '{{ ansible_gitlab_url }}/api/v4/projects'

@@ -25,4 +25,5 @@
 - name: GitLab-Runner | start container
   docker_container:
     name: '{{ ansible_gitlab_runner_container_name }}'
+    docker_host: 'unix:/{{ ansible_docker_socket_path }}'
     state: started

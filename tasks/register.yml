@@ -1,4 +1,74 @@
-- name: GitLab-Runner | Register | register runner
+- name: read the gitlab runner config file
+  shell: cat '{{ ansible_gitlab_runner_project_directory }}/etc/config.toml'
+  register: runner_config
+  changed_when: False
+  ignore_errors: True
+  no_log: True
+- name: If runner config failed set to empty string
+  set_fact:
+    cacheable: False
+    runner_config: {stdout: ""}
+  when: runner_config is not defined
+- name: Get list of all registered and accessible runners
+  uri:
+    url: '{{ gitlab_runner__runners_api_url }}'
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+  register: gitlab_runner__register_api
+  when: gitlab_runner__runners_api_url|d() and gitlab_runner__runners_api_url
+  failed_when: False
+  no_log: True
+- name: Query runner information from server to get associated projects and shared secret
+  uri:
+    url: '{{ gitlab_runner__runners_api_url }}/{{ item.id }}'
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+  register: gitlab_runner__register_api_details
+  with_items: '{{ gitlab_runner__register_api.json }}'
+  no_log: True
+# Filters the queried runner information by the current runners shared secret.
+# By doing so, we get the element representing this runner.
+- name: Filter server result by current runner shared secret
+  set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner: '{{ gitlab_runner__register_api_details_this_runner|d([]) + [ item.json ] }}'
+  with_items: '{{ gitlab_runner__register_api_details.results }}'
+  when: runner_config.stdout is search(item.json.token)
+  no_log: True
+# And therefore know all projects it is currently associated with.
+- name: Resolve current runner associated projects outer list
+  set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner_associated_projects: '{{ gitlab_runner__register_api_details_this_runner_associated_projects|d([]) + item.projects }}'
+  with_items: '{{ gitlab_runner__register_api_details_this_runner }}'
+  no_log: True
+- name: Resolve current runner associated projects inner list
+  set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace: '{{ gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([]) + [ item.path_with_namespace ] }}'
+  with_items: '{{ gitlab_runner__register_api_details_this_runner_associated_projects }}'
+  no_log: True
+# Loop through ansible_gitlab_registration_repossitories and ask the server for detailed information.
+# This allows us to obtain the registration token for the runner (assumed we have the requried access rights)
+- name: Query project information from server
+  uri:
+    url: '{{ gitlab_runner__projects_api_url }}/{{ item | urlencode() | regex_replace("/","%2F") }}'
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+  register: gitlab_runner__register_projects_api
+  with_items: '{{ ansible_gitlab_registration_repossitories }}'
+  no_log: True
+# TODO: Add runner to new projects (by using the gitlab-runner register command so we don't need to write the local config ourself and have higher changes of not breaking in future versions)
+# Loop through ansible_gitlab_registration_repossitories and skip if the element is in gitlab_runner__register_api_details_this_runner_associated_projects
+# Otherwise register the runner for that project
+- name: Fetch runner token for new repossitories.
+  set_fact:
+    cacheable: False
+    ansible_gitlab_runnners_token: '{{ ansible_gitlab_runnners_token|d([]) + [ item.json.runners_token ] }}'
+  with_items: '{{ gitlab_runner__register_projects_api.results }}'
+  when: item.json.path_with_namespace not in gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace
+  no_log: True
+- name: GitLab-Runner | Register | bootstrap registration
   docker_container:
     name: '{{ ansible_gitlab_runner_container_name }}'
     state: started
@@ -7,18 +77,27 @@
       - '{{ ansible_gitlab_runner_project_directory }}/etc:/etc/gitlab-runner:rw'
       - '/var/run/docker.sock:{{ ansible_gitlab_runner_docker_socket_path }}:rw'
     docker_host: 'unix:/{{ ansible_docker_socket_path }}'
-    auto_remove: true
-    cleanup: true
-    detach: false
+    tty: True
+    detach: False
+    cleanup: True
     command: |-
       {{ 'register --non-interactive' +
-        ' --executor "' + {{ ansible_gitlab_runner_executor }} + '"' +
-        ' --docker-image "' + {{ ansible_gitlab_runner_docker_image }} + '"' +
-        ' --url "' + {{ ansible_gitlab_url }} + '"' +
-        ' --registration-token "' + {{ ansible_gitlab_registration_token }} + '"' +
-        ' --description "' + {{ ansible_gitlab_runner_description }} + '"' +
-        ' --tag-list "' + {{ ansible_gitlab_runner_tags | join(",") }} + '"' +
-        {{ (ansible_gitlab_runner_run_untagged) | ternary(' --run-untagged', '') }} +
-        ' --locked="' + {{ (ansible_gitlab_runner_locked) | ternary('true', 'false') }} + '"' }}
-    tty: true
+        ' --executor "' + ansible_gitlab_runner_executor + '"' +
+        ' --docker-image "' + ansible_gitlab_runner_docker_image + '"' +
+        ' --url "' + ansible_gitlab_url + '"' +
+        ' --registration-token "' + item + '"' +
+        ' --description "' + ansible_gitlab_runner_description + '"' +
+        ' --tag-list "' + (ansible_gitlab_runner_tags | join(",")) + '"' +
+        ' --run-untagged="' + (ansible_gitlab_runner_run_untagged | ternary('true', 'false')) + '"' +
+        ' --locked="' + (ansible_gitlab_runner_locked | ternary('true', 'false')) + '"' }}
+  with_items: '{{ ansible_gitlab_runnners_token|d([]) }}'
   notify: restart gitlab-runner
+  # TODO: Remove projects that are not in ansible_gitlab_registration_repossitories
+#- name: GitLab-Runner | Register | remove runner from projects it should no longer be part of.
+#  uri:
+#    url: '{{ gitlab_runner__projects_api_url }}/{{ item.json.path_with_namespace | urlencode() | regex_replace("/","%2F") }}/runners/{{ gitlab_runner__register_api_details_this_runner.id }}'
+#    method: DELETE
+#    headers:
+#      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+#  with_items: '{{ gitlab_runner__register_projects_api.results }}'
+#  when: item.json.path_with_namespace not in ansible_gitlab_registration_repossitories # TODO: and has runner
