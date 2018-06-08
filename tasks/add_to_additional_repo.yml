@@ -1,0 +1,20 @@
+- name: Disable shared runners if enabled for project
+  uri:
+    url: '{{ gitlab_runner__projects_api_url }}/{{ item.path_with_namespace | urlencode() | regex_replace("/","%2F") }}'
+    method: PUT
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+    body: 'shared_runners_enabled=false'
+  with_items: '{{ ansible_gitlab_runners_token }}'
+  no_log: True
+
+- name: Add runner to additional repossitories
+  uri:
+    url: '{{ gitlab_runner__projects_api_url }}/{{ item.path_with_namespace | urlencode() | regex_replace("/","%2F") }}/runners'
+    method: POST
+    status_code: 201
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+    body: 'runner_id={{ runner_id }}'
+  with_items: '{{ ansible_gitlab_runners_token }}'
+#  no_log: True

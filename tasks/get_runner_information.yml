@@ -1,0 +1,70 @@
+- name: read the gitlab runner config file
+  shell: cat '{{ ansible_gitlab_runner_project_directory }}/etc/config.toml'
+  register: runner_config
+  changed_when: False
+  ignore_errors: True
+  no_log: True
+
+- name: If runner config failed set to empty string
+  set_fact:
+    cacheable: False
+    runner_config: {stdout: ""}
+  when: runner_config is not defined
+
+- name: Get list of all registered and accessible runners
+  uri:
+    url: '{{ gitlab_runner__runners_api_url }}'
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+  register: gitlab_runner__register_api
+  when: gitlab_runner__runners_api_url|d() and gitlab_runner__runners_api_url
+  failed_when: False
+  no_log: True
+
+- name: Query runner information from server to get associated projects and shared secret
+  uri:
+    url: '{{ gitlab_runner__runners_api_url }}/{{ item.id }}'
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+  register: gitlab_runner__register_api_details
+  with_items: '{{ gitlab_runner__register_api.json }}'
+  no_log: True
+
+# Filters the queried runner information by the current runners shared secret.
+# By doing so, we get the element(s) representing this runner.
+- name: Filter server result by current runner shared secret
+  set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner: '{{ gitlab_runner__register_api_details_this_runner|d([]) + [ item.json ] }}'
+  with_items: '{{ gitlab_runner__register_api_details.results }}'
+  when: runner_config.stdout is search(item.json.token)
+  no_log: True
+
+- name: Get Runner id
+  set_fact:
+    cacheable: false
+    gitlab_runner__runner_id: '{{ gitlab_runner__runner_id|d([]) + [ item.id ] }}'
+  with_items: '{{ gitlab_runner__register_api_details_this_runner }}'
+
+# And therefore know all projects it is currently associated with.
+- name: Resolve current runner associated projects outer list
+  set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner_associated_projects: '{{ gitlab_runner__register_api_details_this_runner_associated_projects|d([]) + item.projects }}'
+  with_items: '{{ gitlab_runner__register_api_details_this_runner|d([]) }}'
+  no_log: True
+
+- name: Resolve current runner associated projects inner list
+  set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace: '{{ gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([]) + [ item.path_with_namespace ] }}'
+  with_items: '{{ gitlab_runner__register_api_details_this_runner_associated_projects|d([]) }}'
+  no_log: True
+
+- name: Fetch runner token for all new repossitories.
+  set_fact:
+    cacheable: False
+    ansible_gitlab_runners_token: '{{ ansible_gitlab_runners_token|d([]) + [ { "token": item.json.runners_token, "path_with_namespace": item.json.path_with_namespace } ] }}'
+  with_items: '{{ gitlab_runner__register_projects_api.results }}'
+  when: item.json.path_with_namespace not in gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([])
+  no_log: True
