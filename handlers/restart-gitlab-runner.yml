@@ -2,6 +2,7 @@
   docker_container:
     name: '{{ ansible_gitlab_runner_container_name }}'
     state: absent
+    docker_host: 'unix:/{{ ansible_docker_socket_path }}'
 - name: GitLab-Runner | restart hook | bootstrap container
   docker_container:
     name: '{{ ansible_gitlab_runner_container_name }}'
@@ -10,7 +11,9 @@
     volumes:
       - '{{ ansible_gitlab_runner_project_directory }}/etc:/etc/gitlab-runner:rw'
       - '/var/run/docker.sock:{{ ansible_docker_socket_path }}:rw'
+    docker_host: 'unix:/{{ ansible_docker_socket_path }}'
 - name: GitLab-Runner | restart hook | start container
   docker_container:
     name: '{{ ansible_gitlab_runner_container_name }}'
     state: started
+    docker_host: 'unix:/{{ ansible_docker_socket_path }}'

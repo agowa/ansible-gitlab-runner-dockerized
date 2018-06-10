@@ -3,7 +3,7 @@
     name: '{{ ansible_gitlab_runner_base_image }}'
     docker_host: 'unix:/{{ ansible_docker_socket_path }}'
   notify: restart gitlab-runner
-
+  
 - name: GitLab-Runner | volume directory
   file:
     path: '{{ item }}'
@@ -11,7 +11,7 @@
   with_items:
     - '{{ ansible_gitlab_runner_project_directory }}'
     - '{{ ansible_gitlab_runner_project_directory }}/etc'
-
+    
 - name: GitLab-Runner | Register in GitLab
   include: register.yml
 

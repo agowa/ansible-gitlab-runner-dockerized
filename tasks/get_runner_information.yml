@@ -5,6 +5,7 @@
   ignore_errors: True
   no_log: True
 
+# TODO: harden all runner_config.stdout == "" checks
 - name: If runner config failed set to empty string
   set_fact:
     cacheable: False
@@ -40,10 +41,10 @@
   when: runner_config.stdout is search(item.json.token)
   no_log: True
 
-- name: Get Runner id
+- name: Get Runner id and token
   set_fact:
     cacheable: false
-    gitlab_runner__runner_id: '{{ gitlab_runner__runner_id|d([]) + [ item.id ] }}'
+    gitlab_runner__runner_id: '{{ gitlab_runner__runner_id|d([]) + [ {id: item.id, token: item.token} ] }}'
   with_items: '{{ gitlab_runner__register_api_details_this_runner }}'
 
 # And therefore know all projects it is currently associated with.
@@ -61,6 +62,21 @@
   with_items: '{{ gitlab_runner__register_api_details_this_runner_associated_projects|d([]) }}'
   no_log: True
 
+- name: Registered repos
+  set_fact:
+    cacheable: false
+    gitlab_runner__register_project_repos: '{{ gitlab_runner__register_project_repos|d([]) + [ item.json.path_with_namespace ] }}'
+  with_items: '{{ gitlab_runner__register_projects_api.results }}'
+  no_log: True
+
+- name: Superseded repos
+  set_fact:
+    cacheable: false
+    gitlab_runner__register_api_superseded_projects: '{{ gitlab_runner__register_api_superseded_projects|d([]) + [ item ] }}'
+  with_items: '{{ gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([]) }}'
+  when: item not in gitlab_runner__register_project_repos|d([])
+  no_log: True
+
 - name: Fetch runner token for all new repossitories.
   set_fact:
     cacheable: False
@@ -68,3 +84,24 @@
   with_items: '{{ gitlab_runner__register_projects_api.results }}'
   when: item.json.path_with_namespace not in gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([])
   no_log: True
+
+- name: Check runner version
+  docker_container:  
+    name: '{{  }}-temp'
+    state: started
+    image: 'gitlab/gitlab-runner'
+    cleanup: True
+    command: '--version'
+    detach: False
+  register: check_version
+  changed_when: False
+
+- set_fact:
+    cacheable: False
+    runner_version_information:
+      OS_Arch: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["OS/Arch"] }}'
+      Version: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["Version"] }}'
+      Git_Revision: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["Git revision"] }}'
+      Git_Branch: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["Git branch"] }}'
+      GO_Version: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["GO version"] }}'
+      Built: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["Built"] }}'

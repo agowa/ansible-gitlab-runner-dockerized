@@ -1,0 +1,62 @@
+- name: Disable shared runners if enabled for project
+  uri:
+    url: >-
+      {{ gitlab_runner__projects_api_url + '/' +
+      first_repo_to_register_to.path_with_namespace | urlencode() |
+      regex_replace('/','%2F') }}
+    method: PUT
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+    body: shared_runners_enabled=false
+  no_log: true
+  changed_when: true
+
+- name: Prepare Tag list
+  set_fact:
+    ansible_gitlab_runner.tags: >-
+      {{ ansible_gitlab_runner.tags|d([]) + (['privileged'] if
+      (ansible_gitlab_runner.docker|d(false) and
+      ansible_gitlab_runner.docker.privileged|d(false)) else []) + ([
+      ansible_gitlab_runner.executor ] if
+      ansible_gitlab_runner.executor|d(false) else []) | unique }}
+
+- name: Prepair post message for runner registration
+  set_facts:
+    cacheable: false
+    registration_post:
+      description: '{{ ansible_gitlab_runner.description }}'
+      info:
+        architecture: '{{ runner_version_information.split("/")[1] }}'
+        features:
+          cache: false
+          features: false
+          services: false
+          shared: false
+          variables: false
+        name: '{{ ansible_gitlab_runner.name }}'
+        platform: '{{ runner_version_information.split("/")[0] }}'
+        revision: >-
+          {{ runner_version_information.Git_Revision }}{{ ('-' +
+          runner_version_information.Git_Branch + '-' +
+          runner_version_information.Built|replace(':', '-')) if
+          runner_version_information.Git_Revision|d() else '' }}
+        version: '{{ runner_version_information.Version }}'
+      locked: '{{ ansible_gitlab_runner.locked|d(False) }}' #TODO: Unlock runner bevore adding additional repos and log it again after removing the last one.
+      run_untagged: '{{ ansible_gitlab_runner.run_untagged|d(True) }}'
+      tag_list: '{{ ansible_gitlab_runner.tags | join(",") }}'
+      token: '{{ first_repo_to_register_to.token }}'
+      active: true
+      maximum_timeout: '{{ ansible_gitlab_runner.maximum_timeout|d(60) }}'
+
+- name: Register runner
+  uri:
+    url: '{{ gitlab_runner__runners_api_url }}'
+    method: POST
+    status_code: 201
+    body_format: json
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+    body: '{{ registration_post }}'
+  register: newly_registered_runner
+  no_log: true
+  changed_when: true

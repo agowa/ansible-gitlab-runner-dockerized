@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+
+concurrent = {{ ansible_processor_vcpus }}
+check_interval = {{ ansible_check_interval|d(0) }}
+
+[[runners]]
+  name = "{{ ansible_gitlab_runner.name }}"
+  url = "{{ ansible_gitlab_url }}"
+  token = "{{ ansible_runner_shared_secret }}"
+  executor = "{{ ansible_gitlab_runner.executor }}"
+{% if "docker" in ansible_gitlab_runner.executor %}
+  [runners.docker]
+    tls_verify = {{ "true" if ansible_gitlab_runner.docker.tls_verify|d(true) else "false" }}
+    image = "{{ ansible_gitlab_runner.docker.image|d('ansible:latest') }}"
+    privileged = {{ "true" if ansible_gitlab_runner.docker.privileged|d(false) else "false" }}
+    disable_cache = {{ "true" if ansible_gitlab_runner.docker.disable_cache|d(false) else "false" }}
+    volumes = ["/cache"]
+    shm_size = {{ ansible_gitlab_runner.docker.shm_size|d(0) }}
+{% endif %}
+  [runners.cache]

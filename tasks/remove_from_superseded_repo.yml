@@ -1,0 +1,61 @@
+# 403 Forbidden: Only one project associated with the runner. Please remove the runner instead
+# 204 No Content: Runner successfully removed from runner
+- name: Remove runner from superseded repossitories
+  uri:
+    url: >-
+      {{ gitlab_runner__projects_api_url + '/' + item | urlencode() |
+      regex_replace('/','%2F') + '/runners/' + runner.id }}
+    method: DELETE
+    status_code: '204, 403'
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+  with_items: >-
+    {{ gitlab_runner__register_api_superseded_projects|d([]) |
+    difference(gitlab_runner__register_project_repos|d([])) }}
+  register: dodebug
+  no_log: true
+  changed_when: true
+
+- name: Check if runner needs to be removed entirely
+  set_fact:
+    cacheable: false
+    delete_this_runner: true
+  with_items: '{{ dodebug.results }}'
+  when: item.status == 403
+  no_log: true
+
+- name: 'Get runner token, if it needs to be removed'
+  uri:
+    url: '{{ gitlab_runner__runners_api_url + "/" + runner.id }}'
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+  register: runner_token_query
+  when: delete_this_runner|d(False)
+  no_log: true
+
+# The last project a runner is associated with cannot be removed, as it is required to delete the runner instead.
+- name: Remove runner if last project it is associated with is about to be removed
+  uri:
+    url: '{{ gitlab_runner__runners_api_url }}'
+    method: DELETE
+    status_code: 201
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+    body: 'token={{ runner_token_query.json.token }}'
+  when: delete_this_runner|d(False)
+  no_log: true
+  changed_when: true
+
+- name: Enable shared runners if last runner for project was removed
+  uri:
+    url: >-
+      {{ gitlab_runner__projects_api_url + '/' + item.path_with_namespace |
+      urlencode() | regex_replace('/','%2F') }}
+    method: PUT
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+    body: shared_runners_enabled=true
+  with_items: '{{ ansible_gitlab_runners_token|d([]) }}'
+  when: delete_this_runner|d(False)
+  no_log: true
+  changed_when: true

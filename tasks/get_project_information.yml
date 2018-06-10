@@ -2,9 +2,11 @@
 # This allows us to obtain the registration token for the runner (assumed we have the requried access rights)
 - name: Query project information from server
   uri:
-    url: '{{ gitlab_runner__projects_api_url }}/{{ item | urlencode() | regex_replace("/","%2F") }}'
+    url: >-
+      {{ gitlab_runner__projects_api_url + '/'+ item | urlencode() |
+      regex_replace('/','%2F') }}
     headers:
       PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
   register: gitlab_runner__register_projects_api
   with_items: '{{ ansible_gitlab_registration_repossitories }}'
-  no_log: True
+  no_log: true
