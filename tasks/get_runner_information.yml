@@ -1,15 +1,15 @@
 - name: read the gitlab runner config file
   shell: cat '{{ ansible_gitlab_runner_project_directory }}/etc/config.toml'
   register: runner_config
-  changed_when: False
-  ignore_errors: True
-  no_log: True
+  changed_when: false
+  ignore_errors: true
+  no_log: true
 
-# TODO: harden all runner_config.stdout == "" checks
 - name: If runner config failed set to empty string
   set_fact:
-    cacheable: False
-    runner_config: {stdout: ""}
+    cacheable: false
+    runner_config:
+      stdout: ''
   when: runner_config is not defined
 
 - name: Get list of all registered and accessible runners
@@ -19,89 +19,160 @@
       PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
   register: gitlab_runner__register_api
   when: gitlab_runner__runners_api_url|d() and gitlab_runner__runners_api_url
-  failed_when: False
-  no_log: True
+  failed_when: false
+  no_log: true
 
-- name: Query runner information from server to get associated projects and shared secret
+- name: >-
+    Query runner information from server to get associated projects and shared
+    secret
   uri:
-    url: '{{ gitlab_runner__runners_api_url }}/{{ item.id }}'
+    url: '{{ gitlab_runner__runners_api_url + "/" ~ item.id }}'
     headers:
       PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
   register: gitlab_runner__register_api_details
   with_items: '{{ gitlab_runner__register_api.json }}'
-  no_log: True
+  no_log: true
 
+- set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner: []
 # Filters the queried runner information by the current runners shared secret.
-# By doing so, we get the element(s) representing this runner.
-- name: Filter server result by current runner shared secret
+# 'By doing so, we get the element(s) representing this runner.'
+- name: Filter server result by current runner shared secrets
   set_fact:
     cacheable: false
-    gitlab_runner__register_api_details_this_runner: '{{ gitlab_runner__register_api_details_this_runner|d([]) + [ item.json ] }}'
+    gitlab_runner__register_api_details_this_runner: >-
+      {{ gitlab_runner__register_api_details_this_runner|d([]) + [ item.json ]
+      }}
   with_items: '{{ gitlab_runner__register_api_details.results }}'
   when: runner_config.stdout is search(item.json.token)
-  no_log: True
+  no_log: true
 
+- set_fact:
+    cacheable: false
+    gitlab_runner__runner_id: []
 - name: Get Runner id and token
   set_fact:
     cacheable: false
-    gitlab_runner__runner_id: '{{ gitlab_runner__runner_id|d([]) + [ {id: item.id, token: item.token} ] }}'
-  with_items: '{{ gitlab_runner__register_api_details_this_runner }}'
+    gitlab_runner__runner_id: >-
+      {{ gitlab_runner__runner_id|d([]) + [ {'id': item.id, 'token': item.token} ]
+      }}
+  with_items: '{{ gitlab_runner__register_api_details_this_runner|d([]) }}'
 
+- set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner_associated_projects: []
 # And therefore know all projects it is currently associated with.
 - name: Resolve current runner associated projects outer list
   set_fact:
     cacheable: false
-    gitlab_runner__register_api_details_this_runner_associated_projects: '{{ gitlab_runner__register_api_details_this_runner_associated_projects|d([]) + item.projects }}'
+    gitlab_runner__register_api_details_this_runner_associated_projects: >-
+      {{
+      gitlab_runner__register_api_details_this_runner_associated_projects|d([])
+      + item.projects }}
   with_items: '{{ gitlab_runner__register_api_details_this_runner|d([]) }}'
-  no_log: True
+  no_log: true
 
+- set_fact:
+    cacheable: false
+    gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace: []
 - name: Resolve current runner associated projects inner list
   set_fact:
     cacheable: false
-    gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace: '{{ gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([]) + [ item.path_with_namespace ] }}'
-  with_items: '{{ gitlab_runner__register_api_details_this_runner_associated_projects|d([]) }}'
-  no_log: True
+    gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace: >-
+      {{
+      gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([])
+      + [ item.path_with_namespace ] }}
+  with_items: >-
+    {{ gitlab_runner__register_api_details_this_runner_associated_projects|d([])
+    }}
+  no_log: true
 
+- set_fact:
+    cacheable: false
+    gitlab_runner__register_project_repos: []
 - name: Registered repos
   set_fact:
     cacheable: false
-    gitlab_runner__register_project_repos: '{{ gitlab_runner__register_project_repos|d([]) + [ item.json.path_with_namespace ] }}'
+    gitlab_runner__register_project_repos: >-
+      {{ gitlab_runner__register_project_repos|d([]) + [
+      item.json.path_with_namespace ] }}
   with_items: '{{ gitlab_runner__register_projects_api.results }}'
-  no_log: True
+  no_log: true
 
+- set_fact:
+    cacheable: false
+    gitlab_runner__register_api_superseded_projects: []
 - name: Superseded repos
   set_fact:
     cacheable: false
     gitlab_runner__register_api_superseded_projects: '{{ gitlab_runner__register_api_superseded_projects|d([]) + [ item ] }}'
-  with_items: '{{ gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([]) }}'
-  when: item not in gitlab_runner__register_project_repos|d([])
-  no_log: True
+  with_items: >-
+    {{
+    gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([])
+    }}
+  when: 'item not in gitlab_runner__register_project_repos|d([])'
+  no_log: true
 
+- set_fact:
+    cacheable: false
+    ansible_gitlab_runners_token: []
 - name: Fetch runner token for all new repossitories.
   set_fact:
-    cacheable: False
-    ansible_gitlab_runners_token: '{{ ansible_gitlab_runners_token|d([]) + [ { "token": item.json.runners_token, "path_with_namespace": item.json.path_with_namespace } ] }}'
+    cacheable: false
+    ansible_gitlab_runners_token: >-
+      {{ ansible_gitlab_runners_token|d([]) + [ { "token":
+      item.json.runners_token, "path_with_namespace":
+      item.json.path_with_namespace } ] }}
   with_items: '{{ gitlab_runner__register_projects_api.results }}'
-  when: item.json.path_with_namespace not in gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([])
-  no_log: True
+  when: >-
+    item.json.path_with_namespace not in
+    gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([])
+  no_log: true
 
 - name: Check runner version
   docker_container:  
-    name: '{{  }}-temp'
+    name: '72d35013-51f8-4ce2-83c7-962520f74f3e-temp'
     state: started
-    image: 'gitlab/gitlab-runner'
-    cleanup: True
+    image: gitlab/gitlab-runner
+    cleanup: true
     command: '--version'
-    detach: False
+    detach: false
   register: check_version
-  changed_when: False
+  changed_when: false
 
 - set_fact:
-    cacheable: False
+    cacheable: false
     runner_version_information:
-      OS_Arch: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["OS/Arch"] }}'
-      Version: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["Version"] }}'
-      Git_Revision: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["Git revision"] }}'
-      Git_Branch: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["Git branch"] }}'
-      GO_Version: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["GO version"] }}'
-      Built: '{{ (check_version.ansible_facts.docker_container.Output | from_yaml)["Built"] }}'
+      OS_Arch: >-
+        {{ (check_version.ansible_facts.docker_container.Output |
+        from_yaml)["OS/Arch"] }}
+      Version: >-
+        {{ (check_version.ansible_facts.docker_container.Output |
+        from_yaml)["Version"] }}
+      Git_Revision: >-
+        {{ (check_version.ansible_facts.docker_container.Output |
+        from_yaml)["Git revision"] }}
+      Git_Branch: >-
+        {{ (check_version.ansible_facts.docker_container.Output |
+        from_yaml)["Git branch"] }}
+      GO_Version: >-
+        {{ (check_version.ansible_facts.docker_container.Output |
+        from_yaml)["GO version"] }}
+      Built: >-
+        {{ (check_version.ansible_facts.docker_container.Output |
+        from_yaml)["Built"] }}
+
+- name: Prepare Tag list
+  set_fact:
+    ansible_gitlab_runner_final_tag_list: >-
+      {{ (ansible_gitlab_runner.tags|d([]) + (['privileged'] if
+      (ansible_gitlab_runner.docker|d(false) and
+      ansible_gitlab_runner.docker.privileged|d(false)) else []) + (
+      ansible_gitlab_runner.executor if
+      ansible_gitlab_runner.executor|d('docker') else []) +
+      [
+        runner_version_information.OS_Arch.split('/')[0],
+        runner_version_information.OS_Arch.split('/')[1]
+      ]
+      ) | unique }}

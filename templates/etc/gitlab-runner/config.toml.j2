@@ -1,12 +1,13 @@
 # {{ ansible_managed }}
+# RunnerID = {{ item.id }}
 
 concurrent = {{ ansible_processor_vcpus }}
-check_interval = {{ ansible_check_interval|d(0) }}
+check_interval = {{ ansible_gitlab_runner.check_interval|d(0) }}
 
 [[runners]]
   name = "{{ ansible_gitlab_runner.name }}"
   url = "{{ ansible_gitlab_url }}"
-  token = "{{ ansible_runner_shared_secret }}"
+  token = "{{ item.token }}"
   executor = "{{ ansible_gitlab_runner.executor }}"
 {% if "docker" in ansible_gitlab_runner.executor %}
   [runners.docker]

@@ -1,0 +1,23 @@
+- name: Prepair post message for updating runner information
+  set_fact:
+    cacheable: false
+    update_body:
+      description: '{{ ansible_gitlab_runner.description|d("") }}'
+      active: true
+      tag_list: '{{ ansible_gitlab_runner_final_tag_list }}'
+      run_untagged: '{{ ansible_gitlab_runner.run_untagged|d(True) }}'
+      locked: '{{ ansible_gitlab_runner.locked|d(False) }}'
+      maximum_timeout: '{{ ansible_gitlab_runner.maximum_timeout|d(600) }}'
+
+- name: Update runner informations
+  uri:
+    url: '{{ gitlab_runner__runners_api_url + "/" ~ item.id }}'
+    method: PUT
+    body_format: json
+    status_code: 200
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+    body: '{{ update_body }}'
+  with_items: '{{ gitlab_runner__register_api_details_this_runner }}'
+  # TODO: when: local and remote settings diverge
+  #no_log: true

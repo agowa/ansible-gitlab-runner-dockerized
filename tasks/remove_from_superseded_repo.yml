@@ -10,8 +10,7 @@
     headers:
       PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
   with_items: >-
-    {{ gitlab_runner__register_api_superseded_projects|d([]) |
-    difference(gitlab_runner__register_project_repos|d([])) }}
+    {{ gitlab_runner__register_api_superseded_projects|d([]) }}
   register: dodebug
   no_log: true
   changed_when: true

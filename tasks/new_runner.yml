@@ -11,22 +11,13 @@
   no_log: true
   changed_when: true
 
-- name: Prepare Tag list
-  set_fact:
-    ansible_gitlab_runner.tags: >-
-      {{ ansible_gitlab_runner.tags|d([]) + (['privileged'] if
-      (ansible_gitlab_runner.docker|d(false) and
-      ansible_gitlab_runner.docker.privileged|d(false)) else []) + ([
-      ansible_gitlab_runner.executor ] if
-      ansible_gitlab_runner.executor|d(false) else []) | unique }}
-
 - name: Prepair post message for runner registration
-  set_facts:
+  set_fact:
     cacheable: false
     registration_post:
-      description: '{{ ansible_gitlab_runner.description }}'
+      description: '{{ ansible_gitlab_runner.description|d("") }}'
       info:
-        architecture: '{{ runner_version_information.split("/")[1] }}'
+        architecture: '{{ runner_version_information.OS_Arch.split("/")[1] }}'
         features:
           cache: false
           features: false
@@ -34,19 +25,19 @@
           shared: false
           variables: false
         name: '{{ ansible_gitlab_runner.name }}'
-        platform: '{{ runner_version_information.split("/")[0] }}'
+        platform: '{{ runner_version_information.OS_Arch.split("/")[0] }}'
         revision: >-
           {{ runner_version_information.Git_Revision }}{{ ('-' +
           runner_version_information.Git_Branch + '-' +
           runner_version_information.Built|replace(':', '-')) if
-          runner_version_information.Git_Revision|d() else '' }}
+          "" != runner_version_information.Git_Branch|d("") else '' }}
         version: '{{ runner_version_information.Version }}'
-      locked: '{{ ansible_gitlab_runner.locked|d(False) }}' #TODO: Unlock runner bevore adding additional repos and log it again after removing the last one.
+      locked: False # Set later on to correct state.
       run_untagged: '{{ ansible_gitlab_runner.run_untagged|d(True) }}'
-      tag_list: '{{ ansible_gitlab_runner.tags | join(",") }}'
+      tag_list: '{{ ansible_gitlab_runner_final_tag_list }}'
       token: '{{ first_repo_to_register_to.token }}'
       active: true
-      maximum_timeout: '{{ ansible_gitlab_runner.maximum_timeout|d(60) }}'
+      maximum_timeout: '{{ ansible_gitlab_runner.maximum_timeout|d(600) }}'
 
 - name: Register runner
   uri:
@@ -54,9 +45,16 @@
     method: POST
     status_code: 201
     body_format: json
-    headers:
-      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
     body: '{{ registration_post }}'
   register: newly_registered_runner
-  no_log: true
   changed_when: true
+
+- name: Save local configuration
+  template:
+    src: etc/gitlab-runner/config.toml.j2
+    dest: '{{ ansible_gitlab_runner_project_directory }}/etc/config.toml'
+    owner: root
+    group: root
+    mode: '0444'
+  with_items: '{{ [ newly_registered_runner.json ] }}'
+  notify: restart gitlab-runner

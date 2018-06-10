@@ -1,6 +1,6 @@
 - name: Query project information
   include: get_project_information.yml
-  
+
 - name: Query runner information
   include: get_runner_information.yml
 
@@ -10,25 +10,43 @@
   loop_control:
     loop_var: first_repo_to_register_to
   when: >-
-    gitlab_runner__runner_id|d([]) == [] and ansible_gitlab_runners_token|d([])
-    != []
-  register: runner_just_registered
+    gitlab_runner__runner_id|d([]) == [] and ansible_gitlab_runners_token|d([]) != []
   notify: restart gitlab-runner
 
 - name: 'Query runner information, again, if we just registered'
   include: get_runner_information.yml
-  when: runner_just_registered.changed
+
+- name: Unlock runner to change associated repossitories
+  uri:
+    url: '{{ gitlab_runner__runners_api_url + "/" ~ item.id }}'
+    method: PUT
+    status_code: 201
+    headers:
+      PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
+    body: 'locked="false"'
+  with_items: '{{ gitlab_runner__register_api_details_this_runner|d([]) }}'
+  when: >-
+    item.locked == 'true' and
+    ((ansible_gitlab_runners_token != []) or
+    (gitlab_runner__register_api_superseded_projects|d([]) != []))
+  no_log: true
 
 - name: Add runner to additional repossitories
   include: add_to_additional_repo.yml
   with_items: '{{ gitlab_runner__runner_id }}'
   loop_control:
     loop_var: runner
-  when: 'ansible_gitlab_runners_token != []'
+  when: ansible_gitlab_runners_token != []
 
 - name: Remove runner from superseded repossitories
   include: remove_from_superseded_repo.yml
   with_items: '{{ gitlab_runner__runner_id }}'
   loop_control:
     loop_var: runner
-  # when: ansible_gitlab_runners_token != [] TODO: find good when condition
+  when: gitlab_runner__register_api_superseded_projects|d([]) != []
+
+- name: Update runner information
+  include: update_runner_information.yml
+  with_items: '{{ gitlab_runner__register_api_details_this_runner }}'
+  loop_control:
+    loop_var: runner
