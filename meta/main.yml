@@ -17,14 +17,13 @@ galaxy_info:
     versions:
       - all
 
-  categories:
-    - development
-    - git
+  issue_tracker_url: 'https://chaos.expert/agowa338-ansible/ansible-gitlab-runner-dockerized/issues'
 
   galaxy_tags:
     - gitlab
     - ci
     - container
     - development
+    - git
 
 dependencies: []
