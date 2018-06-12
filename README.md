@@ -26,7 +26,7 @@ ansible
 | ansible_gitlab_runner_docker_socket_path   | {{ansible_docker_socket_path}}            |             |
 | ansible_gitlab_runner.name                 | gitlab-runner                             |             |
 | ansible_gitlab_runner.description          | gitlab-runner on {{ inventory_hostname }} |             |
-| ansible_gitlab_runner.executor             | [ "docker" ]                              |             |
+| ansible_gitlab_runner.executor             | "docker"                                  |             |
 | ansible_gitlab_runner.tags                 | [ "docker" ]                              |             |
 | ansible_gitlab_runner.run_untagged         | True                                      |             |
 | ansible_gitlab_runner.locked               | False                                     |             |

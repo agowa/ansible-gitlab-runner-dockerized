@@ -8,8 +8,8 @@ check_interval = {{ ansible_gitlab_runner.check_interval|d(0) }}
   name = "{{ ansible_gitlab_runner.name }}"
   url = "{{ ansible_gitlab_url }}"
   token = "{{ item.token }}"
-  executor = "{{ ansible_gitlab_runner.executor }}"
-{% if "docker" in ansible_gitlab_runner.executor %}
+  executor = "{{ ansible_gitlab_runner.executor|d('docker') }}"
+{% if 'docker' == ansible_gitlab_runner.executor|d('docker') %}
   [runners.docker]
     tls_verify = {{ "true" if ansible_gitlab_runner.docker.tls_verify|d(true) else "false" }}
     image = "{{ ansible_gitlab_runner.docker.image|d('ansible:latest') }}"

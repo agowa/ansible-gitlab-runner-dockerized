@@ -168,9 +168,8 @@
     ansible_gitlab_runner_final_tag_list: >-
       {{ (ansible_gitlab_runner.tags|d([]) + (['privileged'] if
       (ansible_gitlab_runner.docker|d(false) and
-      ansible_gitlab_runner.docker.privileged|d(false)) else []) + (
-      ansible_gitlab_runner.executor if
-      ansible_gitlab_runner.executor|d('docker') else []) +
+      ansible_gitlab_runner.docker.privileged|d(false)) else []) +
+      [ ansible_gitlab_runner.executor|d('docker') ] +
       [
         runner_version_information.OS_Arch.split('/')[0],
         runner_version_information.OS_Arch.split('/')[1]
