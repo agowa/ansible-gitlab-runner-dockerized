@@ -19,6 +19,7 @@
   docker_container:
     name: '{{ ansible_gitlab_runner_container_name }}'
     state: started
+    restart_policy: always
     image: '{{ ansible_gitlab_runner_base_image }}'
     volumes:
       - '{{ ansible_gitlab_runner_project_directory }}/etc:/etc/gitlab-runner:rw'
