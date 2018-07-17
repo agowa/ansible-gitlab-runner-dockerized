@@ -12,9 +12,38 @@
       stdout: ''
   when: runner_config is not defined
 
+- name: runnerCurrentToken
+  set_fact: runner_config_token={{ (runner_config.stdout_lines | select("match", "^ +token = ") | map("regex_replace", "^ +token = ", "") | map("regex_replace", '"', "") | list)[0] }}
+  when: ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' )
+
+- name: runnerCurrentRunnerID
+  set_fact: runner_config_runnerID={{ (runner_config.stdout_lines | select("match", "^.+RunnerID = ") | map("regex_replace", "^.+RunnerID = ", "") | map("regex_replace", '"', "") | list)[0] }}
+  when: ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' )
+
+- name: Check if runner is still registered to the server
+  uri:
+    url: '{{ gitlab_runner__runners_api_url }}/verify'
+    method: POST
+    status_code: 200, 403
+    body_format: json
+    body:
+      token: '{{ runner_config_token }}'
+  register: gitlab_runner__server_still_registered_check
+  when: ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' )
+
+- name: Booleanify server alive check
+  set_fact:
+    gitlab_runner__server_still_registered_check: '{{ True if gitlab_runner__server_still_registered_check.status == 200 else False }}'
+  when: ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' )
+
+- name: Booleanify server alive check
+  set_fact:
+    gitlab_runner__server_still_registered_check: False
+  when: not ( ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' ) )
+
 - name: Get list of all registered and accessible runners
   uri:
-    url: '{{ gitlab_runner__runners_api_url }}'
+    url: '{{ gitlab_runner__runners_api_url }}/all'
     headers:
       PRIVATE-TOKEN: '{{ ansible_gitlab_api_token }}'
   register: gitlab_runner__register_api
@@ -71,6 +100,7 @@
       gitlab_runner__register_api_details_this_runner_associated_projects|d([])
       + item.projects }}
   with_items: '{{ gitlab_runner__register_api_details_this_runner|d([]) }}'
+  when: not ( ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' ) )
   no_log: true
 
 - set_fact:
@@ -86,6 +116,7 @@
   with_items: >-
     {{ gitlab_runner__register_api_details_this_runner_associated_projects|d([])
     }}
+  when: not ( ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' ) )
   no_log: true
 
 - set_fact:
@@ -98,6 +129,7 @@
       {{ gitlab_runner__register_project_repos|d([]) + [
       item.json.path_with_namespace ] }}
   with_items: '{{ gitlab_runner__register_projects_api.results }}'
+  when: not ( ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' ) )
   no_log: true
 
 - set_fact:
@@ -111,7 +143,9 @@
     {{
     gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([])
     }}
-  when: 'item not in gitlab_runner__register_project_repos|d([])'
+  when: >-
+    not ( ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' ) ) and
+    ( item not in gitlab_runner__register_project_repos|d([]) )
   no_log: true
 
 - set_fact:
@@ -126,8 +160,8 @@
       item.json.path_with_namespace } ] }}
   with_items: '{{ gitlab_runner__register_projects_api.results }}'
   when: >-
-    item.json.path_with_namespace not in
-    gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([])
+    not ( ( ansible_gitlab_global_registration_token is defined ) and ( ansible_gitlab_global_registration_token|d('') != '' ) ) and
+    ( item.json.path_with_namespace not in gitlab_runner__register_api_details_this_runner_associated_projects_pathwithnamespace|d([]) )
   no_log: true
 
 - name: Check runner version
